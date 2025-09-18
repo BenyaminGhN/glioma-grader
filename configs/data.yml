@@ -1,0 +1,16 @@
+root_dir: 'data/' 
+data_dir: 'data/raw_data' 
+data_info_fpath: 'data/info_df.csv'
+
+considerations: {}
+
+data_pipeline:
+  # data pipline arguments for data prepartion 
+  is_seg: false
+  to_augment: true
+  class_names: ['normal', 'abnormal'] # label names training
+  is_binary: true
+  val_split: 0.2 # validation split ratio
+  shuffle: true # shuffle the whole datasets before training
+  batch_size: 16 # batch size ( train, validation, evlauation )
+  train_for_submittion: true

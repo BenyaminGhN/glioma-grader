@@ -1,0 +1,17 @@
+working_dir: 'data/preprocessed_data/'
+preprocessing_dir: 'data/preprocessed_data'  
+
+actions:
+  # prerpocessing components and considerations
+  add_channel: true
+  target_size: [256, 256] # target image size (h, w)
+  crop_ratio: [0.2, 0.3]
+  to_correct_bias: true # false
+  to_register: true
+  to_extract_brain: true
+  to_segment: true # false
+  to_resize: true # flase
+  to_normalize: true
+  to_postprocess: true
+  if_brainles_exists: true
+  excluded_modalities: []
