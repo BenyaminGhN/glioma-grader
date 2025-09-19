@@ -5,3 +5,5 @@ brainles_preprocessing==0.1.0
 nipype
 dcm2niix
 antspyx
+omegaconf
+loguru

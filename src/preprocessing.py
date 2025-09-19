@@ -4,9 +4,10 @@ import tempfile
 from tqdm import tqdm
 import cv2
 from pathlib import Path
+import shutil
 import SimpleITK as sitk
 from utils.HD_BET.run import run_hd_bet
-from src.utils import load_dicom_series, store_as_h5, load_h5
+from src.utils import load_dicom_series, store_as_h5, load_h5, load_nifti
 from utils.HD_BET.model_loader import BrainExtractor
 from utils.DeepSeg.inference import TumorSegmentor
 import ants
@@ -34,6 +35,12 @@ class Preprocessor():
         else:
             self.temp_working_dir = Path(self.temp_working_dir)
             self.temp_working_dir.mkdir(parents=True, exist_ok=True)
+
+        if config.preprocessing_dir is None:
+            self.preprocessing_dir = Path("data/preprocessed_dir")
+        else:
+            self.preprocessing_dir = Path(config.preprocessing_dir)
+        self.preprocessing_dir.mkdir(parents=True, exist_ok=True)    
 
         self.to_correct_bias = config.actions.to_correct_bias
         self.to_register = config.actions.to_register
@@ -278,12 +285,13 @@ class Preprocessor():
     
     def run_brainlens(self,
                     t1_fpath,
-                    flair_fpath
+                    flair_fpath,
+                    be_dir
                     ):
 
-        brainles_dir = self.temp_working_dir / f"{self.temp_working_dir.name}_brainles"
-        brainles_dir.mkdir(parents=True, exist_ok=True)
-        norm_bet_dir = brainles_dir / "normalized_bet"
+        # brainles_dir = be_dir / f"{self.temp_working_dir.name}_brainles"
+        be_dir.mkdir(parents=True, exist_ok=True)
+        norm_bet_dir = be_dir / "normalized_bet"
         norm_bet_dir.mkdir(parents=True, exist_ok=True)
 
         # normalizer
@@ -298,7 +306,7 @@ class Preprocessor():
         center = Modality(
                 modality_name="t1",
                 input_path=t1_fpath,
-                normalized_bet_output_path = norm_bet_dir / f"{self.temp_working_dir.name}_t1_bet_normalized.nii.gz",
+                normalized_bet_output_path = norm_bet_dir / f"{be_dir.name}_t1_bet_normalized.nii.gz",
                 atlas_correction=True,
                 normalizer=percentile_normalizer,
         )
@@ -307,7 +315,7 @@ class Preprocessor():
             Modality(
             modality_name="flair",
             input_path=flair_fpath,
-            normalized_bet_output_path = norm_bet_dir / f"{self.temp_working_dir.name}_fla_bet_normalized.nii.gz",
+            normalized_bet_output_path = norm_bet_dir / f"{be_dir.name}_fla_bet_normalized.nii.gz",
             atlas_correction=True,
             normalizer=percentile_normalizer,
             ),
@@ -325,14 +333,14 @@ class Preprocessor():
         )
 
         preprocessor.run(
-            save_dir_coregistration=brainles_dir / "co-registration",
-            save_dir_atlas_registration=brainles_dir / "atlas-registration",
-            save_dir_atlas_correction=brainles_dir / "atlas-correction",
-            save_dir_brain_extraction=brainles_dir / "brain-extraction",
+            save_dir_coregistration = be_dir / "co-registration",
+            save_dir_atlas_registration = be_dir / "atlas-registration",
+            save_dir_atlas_correction = be_dir / "atlas-correction",
+            save_dir_brain_extraction = be_dir / "brain-extraction",
         )
 
-        t1_final_preprocessed_path = brainles_dir / "brain-extraction" / "atlas_bet_t1.nii.gz"
-        flair_final_preprocessed_path = brainles_dir / "brain-extraction" / "brain_masked" / "brain_masked__flair.nii.gz"
+        t1_final_preprocessed_path = be_dir / "brain-extraction" / "atlas_bet_t1.nii.gz"
+        flair_final_preprocessed_path = be_dir / "brain-extraction" / "brain_masked" / "brain_masked__flair.nii.gz"
         final_preprocessed_path = {
             't1': t1_final_preprocessed_path,
             'flair': flair_final_preprocessed_path
@@ -347,7 +355,7 @@ class Preprocessor():
         self.corrupted_files = []
         self.corrupted_pids = []
         pids = np.unique(data_df["PatientID"].values)
-        self.new_paths = []
+        self.final_paths = []
         for pid in tqdm(pids):
             if len(data_df[data_df["PatientID"]==pid].values) != 2:
                 self.corrupted_pids.append(pid)
@@ -368,14 +376,37 @@ class Preprocessor():
             }
 
             be_dir = self.temp_working_dir / f"{pid}" 
+            final_path = self.preprocessing_dir / f"{pid}" 
             center_modality = "t1"
             check_for_registeration = True
 
             if self.if_brainles_exists:
-                self.preprocessed_arrs = self.run_brainlens(
+                self.preprocessed_fpaths = self.run_brainlens(
                     t1_fpath = self.nifti_fpaths["t1"],
                     flair_fpath = self.nifti_fpaths["flair"],
+                    be_dir = be_dir
                 )
+
+                t1_preprocessed_fname = f"{str(self.nifti_fpaths['t1'].name).split('.')[0]}_preprocessed.nii.gz"
+                flair_preprocessed_fname = f"{str(self.nifti_fpaths['flair'].name).split('.')[0]}_preprocessed.nii.gz"
+                t1_dst_path = self.preprocessing_dir / case_name / t1_preprocessed_fname
+                flair_dst_path = self.preprocessing_dir / case_name / flair_preprocessed_fname
+                t1_dst_path.parent.mkdir(parents=True, exist_ok=True)
+                flair_dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+                shutil.move(src = self.preprocessed_fpaths["t1"],
+                            dst = t1_dst_path
+                )
+                shutil.move(src = self.preprocessed_fpaths["flair"],
+                            dst = flair_dst_path
+                )
+
+                shutil.rmtree(be_dir)
+                self.preprocessed_arrs = {
+                    "t1": np.moveaxis(load_nifti(self.preprocessed_fpaths["t1"]), -1, 0),
+                    "flair": np.moveaxis(load_nifti(self.preprocessed_fpaths["flair"]), -1, 0)
+                }
+
             else:
                 self.preprocessed_arrs = self.run(
                     t1_fpath=self.target_fpaths["t1"],
@@ -411,9 +442,9 @@ class Preprocessor():
                         self.corrupted_files.append(f"p{pid}_{idx}.h5")
                         continue
 
-                    self.new_paths.append(Path(be_dir) / f"p{pid}_{idx}.h5")
+                    self.final_paths.append(Path(final_path) / f"p{pid}_{idx}.h5")
                     hdf5_fpaths.append(store_as_h5(stacked_arr,
-                                                dst_path = be_dir,
+                                                dst_path = final_path,
                                                 file_name = f"p{pid}_{idx}.h5",
                                                 meta_data = []))
 
@@ -421,7 +452,7 @@ class Preprocessor():
             torch.cuda.empty_cache()
             from utils.DeepSeg.inference import TumorSegmentor
             self.deep_seg = TumorSegmentor()
-            for slice_path in tqdm(self.new_paths):
+            for slice_path in tqdm(self.final_paths):
                 img_arr = load_h5(slice_path)[0]
                 seg_arr = self.deep_seg.predict(img_arr[:, :, 1])
                 if self.to_resize:

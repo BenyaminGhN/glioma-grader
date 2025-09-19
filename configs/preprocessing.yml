@@ -1,5 +1,5 @@
-working_dir: 'data/preprocessed_data/'
-preprocessing_dir: 'data/preprocessed_data'  
+working_dir: 'data/preprocessed_data/temp/'
+preprocessing_dir: 'data/preprocessed_data'   
 
 actions:
   # prerpocessing components and considerations

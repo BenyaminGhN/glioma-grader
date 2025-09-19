@@ -5,6 +5,7 @@ import h5py
 import re
 import shutil
 import pydicom as dcm
+import nibabel as nib
 from nipype.interfaces.dcm2nii import Dcm2niix
 from tensorflow.python.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, CSVLogger, TensorBoard
 import tensorflow as tf
@@ -20,6 +21,9 @@ def load_dicom_series(series_path):
     # image = reader.Execute()
     image = sitk.ReadImage(dicom_names, sitk.sitkFloat32)
     return image
+
+def load_nifti(data_path):
+    return nib.load(data_path).get_fdata().astype("float32")
 
 # def convert2nifti(series_path, dst_path="fname.nii.gz"):
 #     reader = sitk.ImageSeriesReader()
