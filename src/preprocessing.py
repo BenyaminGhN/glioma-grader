@@ -12,7 +12,7 @@ from utils.HD_BET.model_loader import BrainExtractor
 from utils.DeepSeg.inference import TumorSegmentor
 import ants
 import torch
-from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 
 import pydicom as dcm
 from auxiliary.normalization.percentile_normalizer import PercentileNormalizer
@@ -25,7 +25,7 @@ from brainles_preprocessing.registration import ANTsRegistrator
 
 
 class Preprocessor():
-    def __init__(self, config: OmegaConf):
+    def __init__(self, config: DictConfig):
 
         # Create temporary storage
         self.temp_working_dir = config.working_dir
@@ -355,7 +355,7 @@ class Preprocessor():
         self.corrupted_files = []
         self.corrupted_pids = []
         pids = np.unique(data_df["PatientID"].values)
-        self.final_paths = []
+        self.final_slice_paths = []
         for pid in tqdm(pids):
             if len(data_df[data_df["PatientID"]==pid].values) != 2:
                 self.corrupted_pids.append(pid)
@@ -389,8 +389,8 @@ class Preprocessor():
 
                 t1_preprocessed_fname = f"{str(self.nifti_fpaths['t1'].name).split('.')[0]}_preprocessed.nii.gz"
                 flair_preprocessed_fname = f"{str(self.nifti_fpaths['flair'].name).split('.')[0]}_preprocessed.nii.gz"
-                t1_dst_path = self.preprocessing_dir / case_name / t1_preprocessed_fname
-                flair_dst_path = self.preprocessing_dir / case_name / flair_preprocessed_fname
+                t1_dst_path = self.preprocessing_dir / f"{pid}" / t1_preprocessed_fname
+                flair_dst_path = self.preprocessing_dir / f"{pid}" / flair_preprocessed_fname
                 t1_dst_path.parent.mkdir(parents=True, exist_ok=True)
                 flair_dst_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -403,8 +403,8 @@ class Preprocessor():
 
                 shutil.rmtree(be_dir)
                 self.preprocessed_arrs = {
-                    "t1": np.moveaxis(load_nifti(self.preprocessed_fpaths["t1"]), -1, 0),
-                    "flair": np.moveaxis(load_nifti(self.preprocessed_fpaths["flair"]), -1, 0)
+                    "t1": np.moveaxis(load_nifti(t1_dst_path), -1, 0),
+                    "flair": np.moveaxis(load_nifti(flair_dst_path), -1, 0)
                 }
 
             else:
@@ -424,8 +424,8 @@ class Preprocessor():
                         continue
                     
                     # if not self.to_segment:
-                    t1_slice = self.arr_images["t1"][idx]
-                    fla_slice = self.arr_images["flair"][idx]
+                    t1_slice = self.preprocessed_arrs["t1"][idx]
+                    fla_slice = self.preprocessed_arrs["flair"][idx]
 
                     # final_path = preprocessed_mbe_dir / f"p{pid}_{idx}.h5"
                     # storing as single file for each of the slice instances
@@ -442,7 +442,7 @@ class Preprocessor():
                         self.corrupted_files.append(f"p{pid}_{idx}.h5")
                         continue
 
-                    self.final_paths.append(Path(final_path) / f"p{pid}_{idx}.h5")
+                    self.final_slice_paths.append(Path(final_path) / f"p{pid}_{idx}.h5")
                     hdf5_fpaths.append(store_as_h5(stacked_arr,
                                                 dst_path = final_path,
                                                 file_name = f"p{pid}_{idx}.h5",
@@ -452,7 +452,7 @@ class Preprocessor():
             torch.cuda.empty_cache()
             from utils.DeepSeg.inference import TumorSegmentor
             self.deep_seg = TumorSegmentor()
-            for slice_path in tqdm(self.final_paths):
+            for slice_path in tqdm(self.final_slice_paths):
                 img_arr = load_h5(slice_path)[0]
                 seg_arr = self.deep_seg.predict(img_arr[:, :, 1])
                 if self.to_resize:

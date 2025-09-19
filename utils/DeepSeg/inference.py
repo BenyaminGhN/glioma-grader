@@ -33,7 +33,8 @@ class TumorSegmentor():
 
     def preprocess(self, img, width, height, imgNorm="norm", odering='channels_first'):
         # img = load_h5(img_path)[0][:, :, 2]
-        img = ((img-img.min())/(img.max()-img.min()))*255 # scale to be 0 to 255 (uint8)
+        if len(np.unique(img)) != 1:
+            img = ((img-img.min())/(img.max()-img.min()))*255 # scale to be 0 to 255 (uint8)
         img = img.astype("uint8")
         img = np.dstack([img, img, img])
         if imgNorm == "sub_and_divide":
