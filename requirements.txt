@@ -7,3 +7,4 @@ dcm2niix
 antspyx
 omegaconf
 loguru
+imgaug

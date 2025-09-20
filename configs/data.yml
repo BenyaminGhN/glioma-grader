@@ -1,6 +1,9 @@
+seed: 2
+
 root_dir: 'data/' 
 data_dir: 'data/raw_data' 
 data_info_fpath: 'data/info_df.csv'
+target_csv_fpath: 'data/labels_df.csv'
 
 considerations: {}
 
@@ -13,4 +16,13 @@ data_pipeline:
   val_split: 0.2 # validation split ratio
   shuffle: true # shuffle the whole datasets before training
   batch_size: 16 # batch size ( train, validation, evlauation )
-  train_for_submittion: true
+  model_type: normal_abnormal # model type cna be ['normal_abnormal', 'lgg_hgg']
+  to_preprocess: false
+  prepare_ddir: false
+
+augmentation:
+  # augmentation components and considerations
+  oversampling: true
+  flip: true
+  rotation: true
+  zooming: true
