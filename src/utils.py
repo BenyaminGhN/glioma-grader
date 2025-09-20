@@ -4,10 +4,10 @@ import SimpleITK as sitk
 import h5py
 import re
 import shutil
+from typing import Dict, Tuple, Optional, List, Union
 import pydicom as dcm
 import nibabel as nib
 from nipype.interfaces.dcm2nii import Dcm2niix
-from tensorflow.python.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, CSVLogger, TensorBoard
 import tensorflow as tf
 tfk = tf.keras
 tfkl = tfk.layers
@@ -36,6 +36,110 @@ def load_nifti(data_path):
 
 #     sitk.WriteImage(image, str(dst_path))
 #     return dst_path
+
+def prepare_cross_validation_splits(dataframe: pd.DataFrame, 
+                                   patient_labels: Dict[str, str],
+                                   n_splits: int = 5,
+                                   random_seed: int = 42) -> pd.DataFrame:
+    from sklearn.model_selection import StratifiedKFold
+    
+    df_copy = dataframe.copy()
+    
+    # Create stratified splits at patient level
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+    pids = list(patient_labels.keys())
+    labels = list(patient_labels.values())
+    
+    splits = skf.split(np.arange(len(pids)), labels)
+    
+    for i, (train_splits, val_splits) in enumerate(splits):
+        val_pids = np.array(pids)[val_splits]
+        df_copy[f"Split{i+1}"] = "train"
+        
+        for pid in val_pids:
+            df_copy.loc[df_copy["PatientID"] == pid, f"Split{i+1}"] = "validation"
+    
+    return df_copy
+
+def create_data_sequences(train_df: pd.DataFrame, 
+                         val_df: pd.DataFrame,
+                         model_type: str,
+                         batch_size: int = 32,
+                         target_size: Tuple[int, int] = (240, 240),
+                         brats_data_dir: Optional[Path] = None,
+                         glioma_data_dir: Optional[Path] = None,
+                         random_seed: int = 123) -> Tuple[AugmentedImageSequence, AugmentedImageSequence, int, int]:
+    """
+    Create training and validation data sequences.
+    
+    Args:
+        train_df: Training DataFrame
+        val_df: Validation DataFrame  
+        model_type: Type of model ("normal_abnormal" or "lgg_hgg")
+        batch_size: Batch size for training
+        target_size: Target image size
+        brats_data_dir: Path to BraTS data
+        glioma_data_dir: Path to glioma data
+        random_seed: Random seed for reproducibility
+        
+    Returns:
+        train_seq, val_seq, n_iter_val, n_iter_train
+    """
+    if model_type == "normal_abnormal":
+        class_names = ['normal', 'abnormal']
+    elif model_type == "lgg_hgg":
+        class_names = ['lgg', 'hgg']
+    else:
+        class_names = ['normal', 'lgg', 'hgg']
+    
+    # Training sequence
+    train_steps = int(np.ceil(len(train_df) / batch_size))
+    train_seq = AugmentedImageSequence(
+        dataset_csv_file=train_df,
+        x_col="Path",
+        y_col="NumLabels",
+        class_names=class_names,
+        source_image_dir=Path("."),  # Will be determined in load_image
+        is_binary=False,
+        model_type=model_type,
+        batch_size=batch_size,
+        target_size=target_size,
+        add_channel=False,
+        crop_ratio=[0.2, 0.2],
+        augmentation=True,
+        steps=train_steps,
+        shuffle_on_epoch_end=True,
+        random_state=random_seed,
+        brats_data_dir=brats_data_dir,
+        glioma_data_dir=glioma_data_dir,
+    )
+    
+    # Validation sequence  
+    val_steps = int(np.ceil(len(val_df) / batch_size))
+    val_seq = AugmentedImageSequence(
+        dataset_csv_file=val_df,
+        x_col="Path",
+        y_col="NumLabels", 
+        class_names=class_names,
+        source_image_dir=Path("."),  # Will be determined in load_image
+        is_binary=False,
+        model_type=model_type,
+        batch_size=batch_size,
+        target_size=target_size,
+        add_channel=False,
+        crop_ratio=[0.2, 0.2],
+        augmentation=False,
+        steps=val_steps,
+        shuffle_on_epoch_end=False,
+        random_state=random_seed,
+        brats_data_dir=brats_data_dir,
+        glioma_data_dir=glioma_data_dir,
+    )
+    
+    n_iter_train = len(train_df) // batch_size
+    n_iter_val = len(val_df) // batch_size
+    
+    return train_seq, val_seq, n_iter_val, n_iter_train
 
 def check_considerations(cons: str):
     cons_parts = cons.split(',')
@@ -138,17 +242,4 @@ def is_abnormal(lst, ptn=[1]):
 def is_abnormal2(lst, thresh=1):
       num_true = sum(lst)
       return num_true >= thresh
-
-def create_callbacks(checkpoint_path, history_output_path, log_dir):
-    check1 = ModelCheckpoint(checkpoint_path,
-                             monitor = 'val_loss',
-                             verbose = 1, 
-                             save_best_only = True, 
-                             save_weights_only = True, 
-                             mode = 'min')
-
-    lr_reduction = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, verbose=1, mode="min", min_lr=1e-8)
-    history_logger = CSVLogger(history_output_path, separator=",", append=True)
-    tensor_board = TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=False, write_images=False)
-    return [check1, lr_reduction, history_logger, tensor_board]
 

@@ -1,0 +1,46 @@
+seed: 2
+
+training:
+  # training components and considerations
+  export_metric: 'loss' # best model checkpoint basis 
+  export_mode: 'min' # best model checkpoint basis mode 
+  epochs: 15 # num of epochs
+
+abn_detector: 
+  model: src.model.blocks.DenseNet121 # mdoel class import
+  model_name: "abnormality_detector"
+  model_arch: "DenseNet121" # mdoel arch
+  hist_outpath: './run/densenet121/history.csv'
+  log_dir: './run/densenet121/logs/'
+  chkp_path: './runs/abn/checkpoints/densenet121/densenet121.ckpt'
+  weights_path: './runs/abn/weights/densenet121/densenet121.h5'
+  model_path: './runs/abn/models/densenet121/densenet121.keras'
+
+glioma_classifier: 
+  model: src.model.blocks.EfficientNetB2 # mdoel class import
+  model_name: "lgg_hgg_classifier"
+  model_arch: "EfficientNetB2" # mdoel arch
+  hist_outpath: './run/efficientb2/history.csv'
+  log_dir: './run/efficientb2/logs/'
+  chkp_path: './runs/gcl/checkpoints/efficientb2/effnetb2.ckpt'
+  weights_path: './runs/gcl/weights/efficientb2/effnetb2.h5'
+  model_path: './runs/abn/models/efficientb2/effnetb2.keras'
+  
+aggregator:
+  model_name: "random_forest"
+  model_path: './runs/agg/models/model.pkl'
+
+model_builder:
+  # model builder components and considerations
+  input_shape: [256, 256, 3] # (h, w, ch)
+  activation: 'sigmoid'
+  weights: null # 'imagenet' or null
+  threshold: 0.9 # decision boundary
+  n_classes: 1 # binary and non-binary
+
+evaluation:
+  # evaluation components and considerations
+  metrics: [] # manual metrics
+
+
+

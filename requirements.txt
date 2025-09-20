@@ -2,6 +2,7 @@ tensorflow==2.13
 pydicom==2.4.4
 opencv-python==4.8.0.76
 brainles_preprocessing==0.1.0
+scikit-learn==1.4.2
 nipype
 dcm2niix
 antspyx
