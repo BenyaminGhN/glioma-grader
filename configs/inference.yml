@@ -1,0 +1,21 @@
+seed: 2
+
+run_dir: './run/'
+results_csv_path: './data/predictions.csv'
+
+abn:
+  hist_outpath: './run/densenet121/history.csv'
+  log_dir: './run/densenet121/logs/'
+  chkp_path: './runs/abn/checkpoints/densenet121/densenet121.ckpt'
+  weights_path: './runs/abn/weights/densenet121/densenet121.h5'
+  model_path: './runs/abn/models/densenet121/densenet121.keras'
+
+gcl:
+  hist_outpath: './run/efficientb2/history.csv'
+  log_dir: './run/efficientb2/logs/'
+  chkp_path: './runs/gcl/checkpoints/efficientb2/effnetb2.ckpt'
+  weights_path: './runs/gcl/weights/efficientb2/effnetb2.h5'
+  model_path: './runs/abn/models/efficientb2/effnetb2.keras'
+
+agg:
+  model_path: './runs/agg/models/model.pkl'

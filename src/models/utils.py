@@ -35,9 +35,7 @@ def get_patient_prediction_vector(pid: str,
                                  padding_factor: str = "max", 
                                  to_return_total_slices: bool = False, 
                                  to_predict: bool = False, 
-                                 preds_column: str = "Prediction",
-                                 brats_data_dir: Optional[Path] = None,
-                                 glioma_data_dir: Optional[Path] = None) -> Tuple[List, List, List]:
+                                 preds_column: str = "Prediction") -> Tuple[List, List, List]:
     """Get prediction vector for a patient across all slices."""
     patient_df = target_df[target_df['PatientID'] == pid]
     num_slices = len(patient_df)
@@ -47,13 +45,6 @@ def get_patient_prediction_vector(pid: str,
     num_slices_list = sorted(num_slices_list)
     
     # Determine dataset directory
-    if "brats" in str(pid).lower() and brats_data_dir is not None:
-        dataset_dir = brats_data_dir / "data"
-    elif glioma_data_dir is not None:
-        dataset_dir = glioma_data_dir
-    else:
-        raise ValueError("Data directory not provided")
-    
     start_slice = num_slices_list[0]
     end_slice = num_slices_list[-1]
     slices_preds = []
@@ -62,10 +53,9 @@ def get_patient_prediction_vector(pid: str,
     
     for i in range(start_slice, end_slice + 1):
         slice_fname = f"{pid}_{i}.h5"
-        slice_path = dataset_dir / slice_fname
-        source_slice_path = source_data_dir / slice_fname
+        slice_path = source_data_dir / slice_fname
         
-        if patient_df[patient_df['Path'] == str(source_slice_path)].empty:
+        if patient_df[patient_df['Path'] == str(slice_path)].empty:
             if not to_return_total_slices:
                 slices_ignored.append(i)
                 continue
@@ -86,117 +76,96 @@ def get_patient_prediction_vector(pid: str,
                 img_arr = load_h5(slice_path)[0]
                 slice_pred = model.predict(np.expand_dims(img_arr, 0))[0]
             else:
-                slice_pred = patient_df[patient_df['Path'] == str(source_slice_path)][preds_column].values[0]
+                slice_pred = patient_df[patient_df['Path'] == str(slice_path)][preds_column].values[0]
                 
-            slice_label = patient_df[patient_df['Path'] == str(source_slice_path)]["NumLabels"].values[0]
+            slice_label = patient_df[patient_df['Path'] == str(slice_path)]["NumLabels"].values[0]
             slices_preds.append(float(slice_pred))
             slices_labels.append(int(slice_label))
 
     return slices_labels, slices_preds, slices_ignored
 
-
-class DataProcessor:
-    """Handles data processing and feature extraction between model stages."""
+def create_ml_vector(
+        slice_preds: List[float],
+        padding_factor: int = 154,
+        ):
+    slices_vector = slice_preds.copy()
+    num_slices = len(slices_vector)
     
-    @staticmethod
-    def extract_features_from_predictions(predictions: np.ndarray, 
-                                        confidence_scores: np.ndarray = None) -> np.ndarray:
-        """
-        Extract features from model predictions for next stage.
-        
-        Args:
-            predictions: Model predictions
-            confidence_scores: Optional confidence scores
-            
-        Returns:
-            Feature array for next model stage
-        """
-        features = []
-        
-        # Add prediction probabilities
-        if predictions.ndim > 1:
-            features.extend(predictions.flatten())
-        else:
-            features.extend(predictions)
-            
-        # Add confidence metrics if available
-        if confidence_scores is not None:
-            features.extend([
-                np.mean(confidence_scores),
-                np.std(confidence_scores),
-                np.max(confidence_scores),
-                np.min(confidence_scores)
-            ])
-            
-        # Add statistical features
-        features.extend([
-            np.mean(predictions),
-            np.std(predictions),
-            np.max(predictions),
-            np.min(predictions)
-        ])
-        
-        return np.array(features).reshape(1, -1)
-    
-    @    staticmethod
-    def create_ml_dataset(pids: List[str],
-                         target_df: pd.DataFrame,
-                         slice_preds_list: List[List[float]],
-                         slice_labels_list: List[List[int]], 
-                         patient_labels: List[str],
-                         padding_factor: int = 154,
-                         split_idx: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Create train/validation datasets for ML aggregator.
-        
-        Args:
-            pids: Patient IDs
-            target_df: DataFrame with split information
-            slice_preds_list: List of slice predictions per patient
-            slice_labels_list: List of slice labels per patient
-            patient_labels: List of patient-level labels
-            padding_factor: Number of features to pad/truncate to
-            split_idx: Split index for train/val separation
-            
-        Returns:
-            X_train, X_val, y_train, y_val arrays
-        """
-        X_train = []
-        X_val = []
-        y_train = []
-        y_val = []
-        
-        for i, pid in enumerate(pids):
-            split = target_df[target_df["PatientID"] == pid][f"Split{split_idx}"].values[0]
-            slices_preds = slice_preds_list[i].copy()
-            patient_label = patient_labels[i]
-            num_slices = len(slices_preds)
-            
-            # Pad or truncate to desired length
-            if padding_factor > num_slices:
-                num_missing_slices = int(padding_factor - num_slices)
-                for nslice in range(num_missing_slices):
-                    if nslice % 2 == 0:
-                        slices_preds.insert(-1, 0.0)
-                    else:
-                        slices_preds.insert(0, 0.0)
-            elif padding_factor < num_slices:
-                num_additional_slices = int(num_slices - padding_factor)
-                for nslice in range(num_additional_slices):
-                    if nslice % 2 == 0:
-                        del slices_preds[-1]
-                    else:
-                        del slices_preds[0]
-            
-            # Assign to train or validation
-            if split == "train":
-                X_train.append(slices_preds)
-                y_train.append(1 if patient_label == "hgg" else 0)
+    # Pad or truncate to desired length
+    if padding_factor > num_slices:
+        num_missing_slices = int(padding_factor - num_slices)
+        for nslice in range(num_missing_slices):
+            if nslice % 2 == 0:
+                slices_vector.insert(-1, 0.0)
             else:
-                X_val.append(slices_preds)
-                y_val.append(1 if patient_label == "hgg" else 0)
-                
-        return np.array(X_train), np.array(X_val), np.array(y_train), np.array(y_val)
+                slices_vector.insert(0, 0.0)
+    elif padding_factor < num_slices:
+        num_additional_slices = int(num_slices - padding_factor)
+        for nslice in range(num_additional_slices):
+            if nslice % 2 == 0:
+                del slices_vector[-1]
+            else:
+                del slices_vector[0]
+    return slices_vector
+    
+def create_ml_dataset(pids: List[str],
+                        target_df: pd.DataFrame,
+                        slice_preds_list: List[List[float]],
+                        slice_labels_list: List[List[int]], 
+                        patient_labels: List[str],
+                        padding_factor: int = 154,
+                        split_idx: int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Create train/validation datasets for ML aggregator.
+    
+    Args:
+        pids: Patient IDs
+        target_df: DataFrame with split information
+        slice_preds_list: List of slice predictions per patient
+        slice_labels_list: List of slice labels per patient
+        patient_labels: List of patient-level labels
+        padding_factor: Number of features to pad/truncate to
+        split_idx: Split index for train/val separation
+        
+    Returns:
+        X_train, X_val, y_train, y_val arrays
+    """
+    X_train = []
+    X_val = []
+    y_train = []
+    y_val = []
+    
+    for i, pid in enumerate(pids):
+        split = target_df[target_df["PatientID"] == pid][f"Split{split_idx}"].values[0]
+        slices_preds = slice_preds_list[i].copy()
+        patient_label = patient_labels[i]
+        num_slices = len(slices_preds)
+        
+        # Pad or truncate to desired length
+        if padding_factor > num_slices:
+            num_missing_slices = int(padding_factor - num_slices)
+            for nslice in range(num_missing_slices):
+                if nslice % 2 == 0:
+                    slices_preds.insert(-1, 0.0)
+                else:
+                    slices_preds.insert(0, 0.0)
+        elif padding_factor < num_slices:
+            num_additional_slices = int(num_slices - padding_factor)
+            for nslice in range(num_additional_slices):
+                if nslice % 2 == 0:
+                    del slices_preds[-1]
+                else:
+                    del slices_preds[0]
+        
+        # Assign to train or validation
+        if split == "train":
+            X_train.append(slices_preds)
+            y_train.append(1 if patient_label == "hgg" else 0)
+        else:
+            X_val.append(slices_preds)
+            y_val.append(1 if patient_label == "hgg" else 0)
+            
+    return np.array(X_train), np.array(X_val), np.array(y_train), np.array(y_val)
 
 # Utility functions for evaluation and visualization
 def get_confusion_matrix(labels: np.ndarray, preds: np.ndarray, thresh: float = 0.5) -> Tuple[List[int], List[np.ndarray]]:
