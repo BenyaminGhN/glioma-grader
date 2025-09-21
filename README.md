@@ -123,7 +123,7 @@ Simply modify the `configs/x.yml` files to customize all aspects of the data pip
 
 ### 1. Data Preparation
 ```bash
-# Prepare data and create CSV files for training
+# Prepare data and create CSV files for preprocessing
 python prepare.py --data-dir /path/to/patient/data --out-fpath /path/to/data-info.csv
 ```
 
