@@ -24,9 +24,15 @@ from src.inference_engine import InferenceEngine
 @click.option(
     "--data-dir",
     type = Path,
+    default = None
     help = "path to data directory, which consists of folders of Dicom files, each one corresponding to a Dicom series.",
     )
-@click.option("--predictions_fpath", type=Path)
+@click.option(
+    "--predictions-fpath", 
+    type=Path,
+    default = None,
+    help = "path to final predictions csv file",
+    )
 def main(data_dir: Path, predictions_fpath: Path):
     # get config file
     data_cfpath = Path('configs/data.yml')

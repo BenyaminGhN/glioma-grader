@@ -124,13 +124,13 @@ Simply modify the `configs/x.yml` files to customize all aspects of the data pip
 ### 1. Data Preparation
 ```bash
 # Prepare data and create CSV files for training
-python prepare.py
+python prepare.py --data-dir /path/to/patient/data --out-fpath /path/to/data-info.csv
 ```
 
 ### 2. Preprocessing
 ```bash
 # Preprocess raw MRI data
-python preprocess.py
+python preprocess.py --csv-fpath /path/to/data-info.csv --working-dir path/to/preprocessing/working/dir
 ```
 
 ### 3. Model Training
@@ -180,7 +180,7 @@ The complete three-stage pipeline is implemented in `inference.py`. This provide
 ### Inference Usage
 ```bash
 # Run complete pipeline inference
-python inference.py --input_data /path/to/patient/data --output_dir /path/to/results
+python inference.py --data_dir /path/to/patient/data --predictions-fpath /path/to/results.csv
 ```
 
 The inference engine automatically handles:
