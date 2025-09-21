@@ -1,6 +1,6 @@
 # Multi-Stage Deep Learning Framework for Glioma Grading (LGG/HGG)
 
-This repository contains the implementation for our paper: **"[Paper Title Here]"**
+This repository contains the implementation for our paper: **"MRI-Based Classification of Low- and High-Grade Gliomas Using Deep Learning, Radiomics, and Their Combination"**
 
 ## Overview
 
